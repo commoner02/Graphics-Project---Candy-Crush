@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <cmath>
+#include <random>
 
 Board::Board() {
     layer2.resize(L2_DIM * L2_DIM); // 4x4 = 16 tiles (Top)
@@ -16,15 +17,19 @@ Board::Board() {
 void Board::reset() {
     score = 0;
     combo = 0;
+    movesLeft = MAX_MOVES;
     state = GameState::IDLE;
     selectedCoord = BoardCoord();
     swapTargetCoord = BoardCoord();
     matchedCoords.clear();
+    scorePopups.clear();
     initLayerShapes();
 }
 
 ShapeType Board::getRandomShapeType() const {
-    return static_cast<ShapeType>(std::rand() % static_cast<int>(ShapeType::COUNT));
+    static std::mt19937 rng(std::random_device{}());
+    static std::uniform_int_distribution<int> dist(0, static_cast<int>(ShapeType::COUNT) - 1);
+    return static_cast<ShapeType>(dist(rng));
 }
 
 void Board::toggleExplode() {
@@ -34,6 +39,37 @@ void Board::toggleExplode() {
               << "    Layer 2 (Top 4x4 Board)        : T( 0.000, " << (isExploded ? "+9.750" : "+6.150") << ", 0.000 )\n"
               << "    Layer 1 (Middle 6x6 Wall - 3R) : T( 0.000, " << (isExploded ? "+5.100" : "+3.300") << ", 0.000 )\n"
               << "    Layer 0 (Base 8x8 Wall - 3R)   : T( 0.000, +0.450, 0.000 )" << std::endl;
+}
+
+void Board::cycleTheme() {
+    int next = (static_cast<int>(theme) + 1) % static_cast<int>(BoardTheme::COUNT);
+    theme = static_cast<BoardTheme>(next);
+}
+
+glm::vec4 Board::getBackgroundColor() const {
+    switch (theme) {
+        case BoardTheme::FROSTED_MARBLE:
+            return glm::vec4(0.85f, 0.92f, 0.98f, 1.0f); // Soft Light Sky Blue (User requested)
+        case BoardTheme::CHOCOLATE_BAKERY:
+            return glm::vec4(0.96f, 0.92f, 0.86f, 1.0f); // Warm Vanilla Cream
+        case BoardTheme::MIDNIGHT_ONYX:
+            return glm::vec4(0.030f, 0.035f, 0.050f, 1.0f); // Pure midnight black
+        default:
+            return glm::vec4(0.85f, 0.92f, 0.98f, 1.0f);
+    }
+}
+
+std::string Board::getThemeName() const {
+    switch (theme) {
+        case BoardTheme::FROSTED_MARBLE:
+            return "Soft Sky Blue & White Marble";
+        case BoardTheme::CHOCOLATE_BAKERY:
+            return "Chocolate Core & Vanilla Wafers (Candy Bakery)";
+        case BoardTheme::MIDNIGHT_ONYX:
+            return "Midnight Onyx & Blueprint Slate (Dark Arcade)";
+        default:
+            return "Default";
+    }
 }
 
 glm::vec3 Board::getSlotWorldPos(int layer, int row, int col, int level) const {
@@ -144,6 +180,7 @@ void Board::initLayerShapes() {
             t->scale = 1.0f;
             t->isAnimating = false;
             t->type = getRandomShapeType();
+            t->isGolden = (std::rand() % 15 == 0);
         }
     }
 
@@ -159,6 +196,7 @@ void Board::initLayerShapes() {
                 t->scale = 1.0f;
                 t->isAnimating = false;
                 t->type = getRandomShapeType();
+                t->isGolden = (std::rand() % 15 == 0);
             }
         }
     }
@@ -175,6 +213,7 @@ void Board::initLayerShapes() {
                 t->scale = 1.0f;
                 t->isAnimating = false;
                 t->type = getRandomShapeType();
+                t->isGolden = (std::rand() % 15 == 0);
             }
         }
     }
@@ -266,6 +305,7 @@ BoardCoord Board::pickTile(const Ray& ray) const {
 }
 
 void Board::onTileClicked(const BoardCoord& clicked) {
+    if (state == GameState::GAME_OVER) return;
     if (state != GameState::IDLE) return;
     if (!isValidCoord(clicked)) return;
 
@@ -291,6 +331,7 @@ void Board::onTileClicked(const BoardCoord& clicked) {
 
     if (isAdjacent(selectedCoord, clicked)) {
         swapTargetCoord = clicked;
+        movesLeft--;
         executeSwap(selectedCoord, swapTargetCoord, false);
     } else {
         selectedCoord = clicked;
@@ -414,10 +455,12 @@ void Board::applyGravityAndRefill() {
                 if (writeRow != r) {
                     ShapeTile* targetTile = getTile({2, writeRow, c, 0});
                     targetTile->type = t->type;
+                    targetTile->isGolden = t->isGolden;
                     targetTile->scale = 1.0f;
                     targetTile->currentPos = t->currentPos;
                     targetTile->startMove(getSlotWorldPos(2, writeRow, c, 0), 0.22f);
                     t->type = ShapeType::NONE;
+                    t->isGolden = false;
                 }
                 writeRow--;
             }
@@ -425,6 +468,7 @@ void Board::applyGravityAndRefill() {
         for (int r = writeRow; r >= 0; --r) {
             ShapeTile* t = getTile({2, r, c, 0});
             t->type = getRandomShapeType();
+            t->isGolden = (std::rand() % 15 == 0);
             t->scale = 1.0f;
             glm::vec3 spawnPos = getSlotWorldPos(2, r, c, 0) + glm::vec3(0.0f, 1.8f, 0.0f);
             t->currentPos = spawnPos;
@@ -445,10 +489,12 @@ void Board::applyGravityAndRefill() {
                         if (writeLevel != lvl) {
                             ShapeTile* targetTile = getTile({layer, r, c, writeLevel});
                             targetTile->type = t->type;
+                            targetTile->isGolden = t->isGolden;
                             targetTile->scale = 1.0f;
                             targetTile->currentPos = t->currentPos;
                             targetTile->startMove(getSlotWorldPos(layer, r, c, writeLevel), 0.22f);
                             t->type = ShapeType::NONE;
+                            t->isGolden = false;
                         }
                         writeLevel++;
                     }
@@ -458,6 +504,7 @@ void Board::applyGravityAndRefill() {
                 for (int lvl = writeLevel; lvl < RINGS_PER_WALL; ++lvl) {
                     ShapeTile* t = getTile({layer, r, c, lvl});
                     t->type = getRandomShapeType();
+                    t->isGolden = (std::rand() % 15 == 0);
                     t->scale = 1.0f;
                     glm::vec3 spawnPos = getSlotWorldPos(layer, r, c, RINGS_PER_WALL - 1) + glm::vec3(0.0f, 1.2f, 0.0f);
                     t->currentPos = spawnPos;
@@ -473,6 +520,17 @@ void Board::applyGravityAndRefill() {
 }
 
 void Board::update(float deltaTime) {
+    // Update floating score popups
+    for (auto it = scorePopups.begin(); it != scorePopups.end();) {
+        it->timer -= deltaTime;
+        if (it->timer <= 0.0f) {
+            it = scorePopups.erase(it);
+        } else {
+            it->y -= 40.0f * deltaTime; // Float upward
+            ++it;
+        }
+    }
+
     // Smoothly animate Exploded View (E key)
     float targetExplode = isExploded ? 1.0f : 0.0f;
     if (std::abs(explodeProgress - targetExplode) > 0.0005f) {
@@ -530,6 +588,7 @@ void Board::update(float deltaTime) {
                 ShapeTile* tB = getTile(swapTargetCoord);
                 if (tA && tB) {
                     std::swap(tA->type, tB->type);
+                    std::swap(tA->isGolden, tB->isGolden);
                     tA->currentPos = getSlotWorldPos(selectedCoord.layer, selectedCoord.row, selectedCoord.col, selectedCoord.level);
                     tB->currentPos = getSlotWorldPos(swapTargetCoord.layer, swapTargetCoord.row, swapTargetCoord.col, swapTargetCoord.level);
                 }
@@ -537,15 +596,22 @@ void Board::update(float deltaTime) {
                 if (checkAndMarkMatches()) {
                     combo = 1;
                     int points = static_cast<int>(matchedCoords.size()) * 100 * combo;
-                    score += points;
-                    std::cout << "[MATCH] " << matchedCoords.size() << " shapes crushed! +" << points << " pts! (Combo " << combo << "x)" << std::endl;
-                    std::cout << "  [Transform: Pop] Crushing matched shapes: Scale S( 1.000 -> 0.000 )" << std::endl;
-
+                    bool hasGolden = false;
                     for (const auto& c : matchedCoords) {
-                        getTile(c)->startPop(0.22f);
+                        if (getTile(c)->isGolden) hasGolden = true;
+                        getTile(c)->startPop(0.24f);
                     }
+                    if (hasGolden) {
+                        points += 500;
+                        std::cout << "  🏆 [GOLDEN BONUS CANDY CRUSHED!] +500 EXTRA BONUS POINTS!" << std::endl;
+                    }
+                    score += points;
+                    scorePopups.push_back({640.0f, 400.0f, points, 1.5f, 1.5f});
+                    std::cout << "[MATCH] " << matchedCoords.size() << " candies crushed! +" << points << " pts! (Combo " << combo << "x)" << std::endl;
+                    std::cout << "  [Transform: Pop] Crushing matched candies: Scale S( 1.000 -> 1.280 -> 0.000 )" << std::endl;
+
                     state = GameState::POPPING;
-                    stateTimer = 0.24f;
+                    stateTimer = 0.26f;
                 } else {
                     std::cout << "[NO MATCH] Shapes did not line up. Reverting..." << std::endl;
                     executeSwap(selectedCoord, swapTargetCoord, true);
@@ -559,6 +625,7 @@ void Board::update(float deltaTime) {
                 ShapeTile* tB = getTile(swapTargetCoord);
                 if (tA && tB) {
                     std::swap(tA->type, tB->type);
+                    std::swap(tA->isGolden, tB->isGolden);
                     tA->currentPos = getSlotWorldPos(selectedCoord.layer, selectedCoord.row, selectedCoord.col, selectedCoord.level);
                     tB->currentPos = getSlotWorldPos(swapTargetCoord.layer, swapTargetCoord.row, swapTargetCoord.col, swapTargetCoord.level);
                 }
@@ -581,20 +648,36 @@ void Board::update(float deltaTime) {
                 if (checkAndMarkMatches()) {
                     combo++;
                     int points = static_cast<int>(matchedCoords.size()) * 150 * combo;
-                    score += points;
-                    std::cout << "[CASCADE COMBO " << combo << "x] +" << points << " pts!" << std::endl;
-                    std::cout << "  [Transform: Pop] Crushing matched shapes: Scale S( 1.000 -> 0.000 )" << std::endl;
-
+                    bool hasGolden = false;
                     for (const auto& c : matchedCoords) {
-                        getTile(c)->startPop(0.22f);
+                        if (getTile(c)->isGolden) hasGolden = true;
+                        getTile(c)->startPop(0.24f);
                     }
+                    if (hasGolden) {
+                        points += 500;
+                        std::cout << "  🏆 [CASCADE GOLDEN BONUS!] +500 EXTRA BONUS POINTS!" << std::endl;
+                    }
+                    score += points;
+                    scorePopups.push_back({640.0f, 400.0f, points, 1.5f, 1.5f});
+                    std::cout << "[CASCADE COMBO " << combo << "x] +" << points << " pts!" << std::endl;
+                    std::cout << "  [Transform: Pop] Crushing matched candies: Scale S( 1.000 -> 1.280 -> 0.000 )" << std::endl;
+
                     state = GameState::POPPING;
-                    stateTimer = 0.24f;
+                    stateTimer = 0.26f;
                 } else {
                     combo = 0;
                     selectedCoord = BoardCoord();
                     swapTargetCoord = BoardCoord();
-                    state = GameState::IDLE;
+                    // Check for game over after all cascades resolve
+                    if (movesLeft <= 0) {
+                        state = GameState::GAME_OVER;
+                        std::cout << "\n==============================" << std::endl;
+                        std::cout << "    GAME OVER! Final Score: " << score << std::endl;
+                        std::cout << "    Press [R] to restart!" << std::endl;
+                        std::cout << "==============================\n" << std::endl;
+                    } else {
+                        state = GameState::IDLE;
+                    }
                 }
             }
             break;
@@ -604,49 +687,66 @@ void Board::update(float deltaTime) {
     }
 }
 
-void Board::draw(const Shader& shader, const Mesh& cubeMesh, const Mesh& sphereMesh,
-                 const Mesh& cylinderMesh, const Mesh& diamondMesh, float time) const {
+void Board::draw(const Shader& shader, const Mesh& trayMesh, const Mesh& bentCylMesh,
+                 const Mesh& saucerMesh, const Mesh& pillowMesh, const Mesh& teardropMesh, float time) const {
     // -------------------------------------------------------------
     // 1. DRAW ARCHITECTURAL STEPPED TRAYS & CORE PEDESTALS
     // -------------------------------------------------------------
     shader.setBool("isTray", true);
-    shader.setVec4("objectColor", glm::vec4(0.38f, 0.42f, 0.52f, 1.0f));
+    shader.setBool("isGolden", false);
+
+    // Dynamic Architectural Material Palette based on Active Theme
+    glm::vec4 trayColor(0.96f, 0.96f, 0.98f, 1.0f); // Crisp White Marble Platforms
+    glm::vec4 coreColor(0.68f, 0.72f, 0.78f, 1.0f); // Soft Slate Inner Core Columns
+
+    if (theme == BoardTheme::CHOCOLATE_BAKERY) {
+        trayColor = glm::vec4(0.90f, 0.84f, 0.74f, 1.0f); // Vanilla Sugar Wafer Trays
+        coreColor = glm::vec4(0.38f, 0.22f, 0.14f, 1.0f); // Rich Milk Chocolate Core
+    } else if (theme == BoardTheme::MIDNIGHT_ONYX) {
+        trayColor = glm::vec4(0.24f, 0.28f, 0.38f, 1.0f); // Deep Blueprint Slate Trays
+        coreColor = glm::vec4(0.12f, 0.14f, 0.18f, 1.0f); // Dark Obsidian Onyx Core
+    }
 
     float explode1 = 1.80f * explodeProgress;
     float explode2 = 3.60f * explodeProgress;
 
     // Layer 0 Base Tray (Foundation: 8.5 x 0.25 x 8.5) at Y = 0.0
+    shader.setVec4("objectColor", trayColor);
     glm::mat4 m0 = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
     m0 = glm::scale(m0, glm::vec3(8.5f, 0.25f, 8.5f));
     shader.setMat4("model", m0);
-    cubeMesh.draw();
+    trayMesh.draw();
 
-    // Layer 0 Core Pedestal (Solid stone core inside the 8x8 wall)
+    // Layer 0 Core Pedestal (Solid core pillar inside the 8x8 wall)
+    shader.setVec4("objectColor", coreColor);
     glm::mat4 c0 = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.425f, 0.0f));
     c0 = glm::scale(c0, glm::vec3(6.0f, 2.60f, 6.0f));
     shader.setMat4("model", c0);
-    cubeMesh.draw();
+    trayMesh.draw();
 
     // Layer 1 Middle Tray (Terrace Platform: 6.5 x 0.25 x 6.5) at Y = 2.85 + explode1
+    shader.setVec4("objectColor", trayColor);
     glm::mat4 m1 = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 2.85f + explode1, 0.0f));
     m1 = glm::scale(m1, glm::vec3(6.5f, 0.25f, 6.5f));
     shader.setMat4("model", m1);
-    cubeMesh.draw();
+    trayMesh.draw();
 
-    // Layer 1 Core Pedestal (Solid stone core inside the 6x6 wall)
+    // Layer 1 Core Pedestal (Solid core pillar inside the 6x6 wall)
+    shader.setVec4("objectColor", coreColor);
     glm::mat4 c1 = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 4.275f + explode1, 0.0f));
     c1 = glm::scale(c1, glm::vec3(4.0f, 2.60f, 4.0f));
     shader.setMat4("model", c1);
-    cubeMesh.draw();
+    trayMesh.draw();
 
     // Layer 2 Top Tray (Summit Platform: 4.5 x 0.25 x 4.5) at Y = 5.70 + explode2
+    shader.setVec4("objectColor", trayColor);
     glm::mat4 m2 = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 5.70f + explode2, 0.0f));
     m2 = glm::scale(m2, glm::vec3(4.5f, 0.25f, 4.5f));
     shader.setMat4("model", m2);
-    cubeMesh.draw();
+    trayMesh.draw();
 
     // -------------------------------------------------------------
-    // 2. DRAW SHAPES (Top Board + 3-Story Colosseum Walls)
+    // 2. DRAW CANDIES (Top Board + 3-Story Colosseum Walls)
     // -------------------------------------------------------------
     shader.setBool("isTray", false);
 
@@ -655,7 +755,7 @@ void Board::draw(const Shader& shader, const Mesh& cubeMesh, const Mesh& sphereM
         for (int c = 0; c < L2_DIM; ++c) {
             BoardCoord coord{2, r, c, 0};
             bool isSel = (coord == selectedCoord);
-            getTile(coord)->draw(shader, sphereMesh, cylinderMesh, cubeMesh, diamondMesh, isSel, time);
+            getTile(coord)->draw(shader, bentCylMesh, saucerMesh, pillowMesh, teardropMesh, isSel, time);
         }
     }
 
@@ -666,7 +766,7 @@ void Board::draw(const Shader& shader, const Mesh& cubeMesh, const Mesh& sphereM
                 BoardCoord coord{1, r, c, lvl};
                 if (!isValidCoord(coord)) continue;
                 bool isSel = (coord == selectedCoord);
-                getTile(coord)->draw(shader, sphereMesh, cylinderMesh, cubeMesh, diamondMesh, isSel, time);
+                getTile(coord)->draw(shader, bentCylMesh, saucerMesh, pillowMesh, teardropMesh, isSel, time);
             }
         }
     }
@@ -678,7 +778,7 @@ void Board::draw(const Shader& shader, const Mesh& cubeMesh, const Mesh& sphereM
                 BoardCoord coord{0, r, c, lvl};
                 if (!isValidCoord(coord)) continue;
                 bool isSel = (coord == selectedCoord);
-                getTile(coord)->draw(shader, sphereMesh, cylinderMesh, cubeMesh, diamondMesh, isSel, time);
+                getTile(coord)->draw(shader, bentCylMesh, saucerMesh, pillowMesh, teardropMesh, isSel, time);
             }
         }
     }

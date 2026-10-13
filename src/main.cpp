@@ -11,6 +11,7 @@
 #include "Shader.h"
 #include "Camera.h"
 #include "Board.h"
+#include "HUD.h"
 
 // -----------------------------------------------------------------------------
 // Global Application State
@@ -18,9 +19,17 @@
 const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 800;
 
-// Wireframe state: ON by default for pure geometric inspection
-bool g_wireframe = true;
+// Shading & Rendering state: Solid 3D by default with Phong specular
+bool g_wireframe = false;
 bool g_orthographic = false;
+
+// Shading Mode: 0 = Flat/Clay, 1 = Gouraud (per-vertex), 2 = Phong (per-fragment specular)
+int  g_shadingMode = 2;
+bool g_showNormalMap = false; // Normal Vector Visualization (RGB = Normal * 0.5 + 0.5)
+bool g_brushEffect   = true;  // Artisan Hand-Brushed Glaze & Anisotropic Silky Ribbon
+
+HUD g_hud;
+
 
 Camera g_camera;
 Board  g_board;
@@ -43,7 +52,29 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         } else if (key == GLFW_KEY_W) {
             g_wireframe = !g_wireframe;
-            std::cout << "[Mode] " << (g_wireframe ? "PURE WIREFRAME (GL_LINE)" : "MINIMAL CLAY (GL_FILL)") << std::endl;
+            std::cout << "[Mode] " << (g_wireframe ? "PURE WIREFRAME (GL_LINE)" : "SOLID SHADED (GL_FILL)") << std::endl;
+        } else if (key == GLFW_KEY_G) {
+            g_showNormalMap = false;
+            g_shadingMode = (g_shadingMode + 1) % 3;
+            if (g_wireframe) g_wireframe = false;
+            const char* sNames[] = {
+                "1. FLAT SHADING (Basic Ambient + Diffuse)",
+                "2. GOURAUD SHADING (Per-Vertex Lighting Calculation)",
+                "3. PHONG SHADING (Per-Fragment Blinn-Phong Specular Highlight)"
+            };
+            std::cout << "[Shading Model: Key G] Switched to: " << sNames[g_shadingMode] << std::endl;
+        } else if (key == GLFW_KEY_N) {
+            g_showNormalMap = !g_showNormalMap;
+            if (g_showNormalMap && g_wireframe) g_wireframe = false;
+            std::cout << "[Shading Model: Key N] Surface Normal Map: "
+                      << (g_showNormalMap ? "ON (RGB = Normal * 0.5 + 0.5)" : "OFF (Standard Shading)") << std::endl;
+        } else if (key == GLFW_KEY_B) {
+            g_board.cycleTheme();
+            std::cout << "[Theme: Key B] Pyramid & Background Theme: " << g_board.getThemeName() << std::endl;
+        } else if (key == GLFW_KEY_C) {
+            g_brushEffect = !g_brushEffect;
+            std::cout << "[Confectionery: Key C] Artisan Hand-Brushed Glaze: "
+                      << (g_brushEffect ? "ON (Silky Pulled-Sugar Satin Ribbon + Bakery Glaze Swipe)" : "OFF (Smooth Glossy Jelly)") << std::endl;
         } else if (key == GLFW_KEY_E) {
             g_board.toggleExplode();
         } else if (key == GLFW_KEY_SPACE) {
@@ -137,6 +168,28 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
         int w, h;
         glfwGetFramebufferSize(window, &w, &h);
+
+        // Clickable HUD Top-Right Controls Check
+        int ctrl = HUD::checkControlClick(mx, my, w, h);
+        if (ctrl > 0) {
+            if (ctrl == 1) { // [G] Shading
+                g_showNormalMap = false;
+                g_shadingMode = (g_shadingMode + 1) % 3;
+                if (g_wireframe) g_wireframe = false;
+                std::cout << "[HUD Click: Key G] Shading Mode changed to: " << g_shadingMode << std::endl;
+            } else if (ctrl == 2) { // [B] Theme
+                g_board.cycleTheme();
+                std::cout << "[HUD Click: Key B] Theme: " << g_board.getThemeName() << std::endl;
+            } else if (ctrl == 3) { // [W] Wireframe
+                g_wireframe = !g_wireframe;
+                std::cout << "[HUD Click: Key W] Wireframe: " << (g_wireframe ? "ON" : "OFF") << std::endl;
+            } else if (ctrl == 4) { // [P] Projection
+                g_orthographic = !g_orthographic;
+                std::cout << "[HUD Click: Key P] Projection: " << (g_orthographic ? "ORTHO" : "PERSP") << std::endl;
+            }
+            return;
+        }
+
         float aspect = (h > 0) ? (static_cast<float>(w) / static_cast<float>(h)) : 1.0f;
 
         glm::mat4 proj;
@@ -149,6 +202,11 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
         // Raycast from 2D screen into 3D world space
         Ray ray = g_camera.getRayFromScreen(mx, my, w, h, proj);
+
+        std::cout << "[3D Raycasting Unproject] Screen (" << mx << ", " << my << ") -> Ray Origin: [ "
+                  << ray.origin.x << ", " << ray.origin.y << ", " << ray.origin.z << " ], Dir: [ "
+                  << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z << " ]" << std::endl;
+
         BoardCoord hit = g_board.pickTile(ray);
         g_board.onTileClicked(hit);
     }
@@ -184,7 +242,6 @@ void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
     std::cout << "[Transform: Camera Zoom] Distance: " << g_camera.distance << " units" << std::endl;
 }
 
-
 void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
     (void)window;
     glViewport(0, 0, width, height);
@@ -208,7 +265,7 @@ int main() {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SAMPLES, 4); // Anti-Aliasing
 
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "3D Geometric Shape-Match (Pure Wireframe)", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "3D Candy Crush Pyramid", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -241,38 +298,49 @@ int main() {
     // 4. Compile & Link Shaders
     Shader shader;
     if (!shader.init("shaders/wireframe.vert", "shaders/wireframe.frag")) {
-        std::cerr << "Failed to build shader program!" << std::endl;
+        std::cerr << "Failed to build main shader program!" << std::endl;
         return -1;
     }
 
+    // Initialize 2D Vector & Digital HUD
+    if (!g_hud.init()) {
+        std::cerr << "[HUD] Warning: Failed to build HUD shader program!" << std::endl;
+    }
+
+
     // 5. Generate Procedural Geometric Meshes (All pure GL_TRIANGLES)
-    Mesh cubeMesh     = Primitives::createCube();                    // Unit Cube (12 tris)
-    Mesh cylinderMesh = Primitives::createCylinder(8, 0.4f, 0.35f);  // Octagonal Prism (32 tris)
-    Mesh sphereMesh   = Primitives::createSphere(16, 20, 0.42f);     // UV Sphere (640 tris)
-    Mesh diamondMesh  = Primitives::createDiamond(8, 0.42f, 0.65f);  // Bipyramid (16 tris)
+    Mesh trayMesh     = Primitives::createCube();                            // Foundation Slabs & Pillars (12 tris)
+    Mesh bentCylMesh  = Primitives::createBentCylinder();                    // Red Bent Cylinder with Rounded Caps (1560 tris)
+    Mesh saucerMesh   = Primitives::createFlyingSaucer(24, 24, 0.32f, 0.14f);// Blue Flying Saucer / Saturn Drop (1152 tris)
+    Mesh pillowMesh   = Primitives::createPillow(20, 28, 0.35f, 0.18f);      // Green Square Pillow (1120 tris)
+    Mesh teardropMesh = Primitives::createTeardrop(24, 24, 0.36f, 0.70f);    // Orange Teardrop (1152 tris)
 
     // Print Console Instructions
     std::cout << "\n==================================================================\n"
-              << "       3D GEOMETRIC SHAPE-MATCH: 3-RING COLOSSEUM EDITION\n"
+              << "                    3D CANDY CRUSH PYRAMID\n"
               << "==================================================================\n"
-              << " ARCHITECTURE (160 PROCEDURAL SHAPES):\n"
-              << "   - Layer 2 (Summit) : 4x4 Full Board     (16 Shapes at Y=6.15)\n"
-              << "   - Layer 1 (Middle) : 6x6 Wall of 3 Rings (60 Shapes, 20/ring, Levels 0..2)\n"
-              << "   - Layer 0 (Base)   : 8x8 Wall of 3 Rings (84 Shapes, 28/ring, Levels 0..2)\n"
+              << " ARCHITECTURE (160 PROCEDURAL CANDIES):\n"
+              << "   - Summit (Layer 2) : 4x4 Full Board     (16 Candies at Y=6.15)\n"
+              << "   - Middle (Layer 1) : 6x6 Wall of 3 Rings (60 Candies, 20/ring, Levels 0..2)\n"
+              << "   - Base   (Layer 0) : 8x8 Wall of 3 Rings (84 Candies, 28/ring, Levels 0..2)\n"
+              << " ICONIC CANDY CRUSH SWEETS:\n"
+              << "   - Red Bent Cyl     : Cherry Bent Cylinder (Curved like a jelly bean, smooth Y-spin + breathe)\n"
+              << "   - Blue Saucer      : Blue Flying Saucer with Collar (28 rad/s turntable spin)\n"
+              << "   - Green Pillow     : Lime Puffed Square Pillow (3D chaotic tumble)\n"
+              << "   - Yellow Water Drop: Candied Lemon Water Drop (Upward piriform droplet, floating bob + droplet sway)\n"
+              << "   - 24K Bronze Gold  : Rare Bonus Candy (+500 pts, Supernova burst)\n"
               << " MATCH-3 RULES ON 3-STORY WALLS:\n"
               << "   - 4-Way Swapping   : Swap Left/Right around ring, or Up/Down on wall!\n"
-              << "   - Horizontal Match : 3-in-a-row around perimeter at same level.\n"
-              << "   - Vertical Match   : 3-in-a-row column straight up/down the wall.\n"
+              << "   - Golden Bonus     : Rare 24K Gold Shapes award +500 EXTRA BONUS POINTS!\n"
               << "   - Wall Gravity     : Shapes drop down -Y towards floor; new spawn at top.\n"
-              << " SHAPES & VIBRANT PALETTE:\n"
-              << "   [1] UV Sphere     (Ruby Red)      : 16 rings x 20 sectors = 640 Triangles\n"
-              << "   [2] Oct. Cylinder (Emerald Green) : 8 sectors + 2 fan caps = 32 Triangles\n"
-              << "   [3] Unit Cube     (Topaz Gold)    : 6 faces x 2 triangles = 12 Triangles\n"
-              << "   [4] Bipyramid     (Electric Cyan) : 8 equatorial facets    = 16 Triangles\n"
+              << " SHADING & LIGHTING (ACADEMIC SHOWCASE):\n"
+              << "   - [G] Key            : Cycle Shading: Flat -> Gouraud (Per-Vertex) -> Phong (Per-Fragment)\n"
+              << "   - [C] Key            : Toggle Artisan Hand-Brushed Glaze (Silky Ribbon Sheen)\n"
+              << "   - [N] Key            : Toggle Surface Normal Vector Map (RGB = Normal * 0.5 + 0.5)\n"
+              << "   - [W] Key            : Toggle Wireframe / Solid Shading Mode\n"
               << " CONTROLS:\n"
-              << "   - Left Mouse Click   : Select Shape & Click adjacent neighbor to SWAP\n"
+              << "   - Left Mouse Click   : Select & Swap (Shows 3D Unprojected Ray in World Space)\n"
               << "   - [E] Key            : Exploded Layer View (Separates Tiers along Y)\n"
-              << "   - [W] Key            : Toggle Wireframe / Solid Architectural Shading\n"
               << "   - [P] Key            : Toggle Perspective / Orthographic Blueprint View\n"
               << "   - [M] Key            : Dump 4x4 Model-View-Projection (MVP) Matrices\n"
               << "   - [Spacebar]         : Pause / Resume 360 Camera Auto-Orbit\n"
@@ -296,29 +364,30 @@ int main() {
         g_camera.update(deltaTime);
         g_board.update(deltaTime);
 
-        // Update Dynamic Window Title
-        if (g_board.score != g_lastScore || g_board.combo != g_lastCombo) {
-            char title[256];
+        // Update Dynamic Window Title with Shading Mode & Combo Status
+        char title[256];
+        const char* modeName = (g_showNormalMap ? "NORMAL MAP" :
+                               (g_shadingMode == 1 ? "GOURAUD" :
+                               (g_shadingMode == 0 ? "FLAT" : (g_wireframe ? "WIREFRAME" : "PHONG"))));
+
+        if (g_board.state == GameState::GAME_OVER) {
             std::snprintf(title, sizeof(title),
-                          "3D COLOSSEUM (3-RING WALLS) | Score: %d | Combo: %dx | [E] Explode | [W] Wire/Solid",
-                          g_board.score, g_board.combo);
-            glfwSetWindowTitle(window, title);
-            g_lastScore = g_board.score;
-            g_lastCombo = g_board.combo;
-        }
-
-        // Toggle Polygon Mode
-        if (g_wireframe) {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            glDisable(GL_CULL_FACE); // See through all triangles in wireframe mode
+                          "GAME OVER! | Final Score: %d | %s | [R] Restart",
+                          g_board.score, g_board.getThemeName().c_str());
+        } else if (g_board.combo > 1) {
+            std::snprintf(title, sizeof(title),
+                          "\xf0\x9f\x94\xa5 COMBO x%d! | Score: %d | Moves: %d | %s | %s",
+                          g_board.combo, g_board.score, g_board.movesLeft, modeName, g_board.getThemeName().c_str());
         } else {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            glEnable(GL_CULL_FACE);
-            glCullFace(GL_BACK);
+            std::snprintf(title, sizeof(title),
+                          "3D CANDY PYRAMID | Score: %d | Moves: %d | %s | %s",
+                          g_board.score, g_board.movesLeft, modeName, g_board.getThemeName().c_str());
         }
+        glfwSetWindowTitle(window, title);
 
-        // Clear screen with deep dark slate background
-        glClearColor(0.06f, 0.065f, 0.095f, 1.0f);
+        // Clear screen with active theme background color
+        glm::vec4 bg = g_board.getBackgroundColor();
+        glClearColor(bg.r, bg.g, bg.b, bg.a);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // View Matrix
@@ -337,23 +406,61 @@ int main() {
             projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
         }
 
+        // -------------------------------------------------------------
+        // RASTERIZATION PIPELINE (GL_TRIANGLES)
+        // -------------------------------------------------------------
+        // Toggle Polygon Mode
+        if (g_wireframe) {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            glDisable(GL_CULL_FACE); // See through all triangles in wireframe mode
+        } else {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            glEnable(GL_CULL_FACE);
+            glCullFace(GL_BACK);
+        }
+
         shader.use();
         shader.setBool("isWireframe", g_wireframe);
+        shader.setBool("isBrushed", g_brushEffect);
+        shader.setInt("shadingMode", g_showNormalMap ? 3 : g_shadingMode);
+        shader.setVec3("viewPos", g_camera.getPosition());
         shader.setMat4("view", view);
         shader.setMat4("projection", projection);
 
-        // Draw Stepped Pyramid Trays and Geometric Shapes
-        g_board.draw(shader, cubeMesh, sphereMesh, cylinderMesh, diamondMesh, static_cast<float>(currentTime));
+        // Draw Stepped Pyramid Trays and Candy Crush Sweets
+        g_board.draw(shader, trayMesh, bentCylMesh, saucerMesh, pillowMesh, teardropMesh, static_cast<float>(currentTime));
+
+
+        // -------------------------------------------------------------
+        // IN-GAME ARCADE HUD OVERLAY
+        // -------------------------------------------------------------
+        const ShapeTile* selectedTile = g_board.selectedCoord.isValid() ? g_board.getTile(g_board.selectedCoord) : nullptr;
+
+        // Convert Board popups to HUD format
+        std::vector<ScorePopupData> hudPopups;
+        for (const auto& p : g_board.scorePopups) {
+            hudPopups.push_back({p.x, p.y, p.points, p.timer, p.maxTime});
+        }
+
+        bool isGameOver = (g_board.state == GameState::GAME_OVER);
+        g_hud.draw(width, height, g_board.score, g_board.combo,
+                   g_board.movesLeft, isGameOver,
+                   g_shadingMode, g_showNormalMap, g_wireframe, g_orthographic,
+                   static_cast<int>(g_board.theme),
+                   selectedTile, static_cast<float>(currentTime), hudPopups);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
     // Cleanup Resources
-    cubeMesh.destroy();
-    cylinderMesh.destroy();
-    sphereMesh.destroy();
-    diamondMesh.destroy();
+
+    g_hud.destroy();
+    trayMesh.destroy();
+    bentCylMesh.destroy();
+    saucerMesh.destroy();
+    pillowMesh.destroy();
+    teardropMesh.destroy();
     shader.destroy();
 
     glfwDestroyWindow(window);

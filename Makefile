@@ -2,7 +2,7 @@ CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -Iinclude
 LDFLAGS = -lglfw -lGLEW -lGL -lGLU
 
-SRCS = src/main.cpp src/Mesh.cpp src/Primitives.cpp src/Shader.cpp src/Camera.cpp src/Shape.cpp src/Board.cpp
+SRCS = src/main.cpp src/Mesh.cpp src/Primitives.cpp src/Shader.cpp src/Camera.cpp src/Shape.cpp src/Board.cpp src/HUD.cpp
 OBJS = $(SRCS:.cpp=.o)
 TARGET = candy_pyramid
 

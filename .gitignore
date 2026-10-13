@@ -69,3 +69,39 @@ CTestTestfile.cmake
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Documentation, presentations, reports & temporary scratch
+temp/
+notes/
+presentation/
+report/
+.extra/
+
+# Document & presentation binaries
+*.pdf
+*.pptx
+*.ppt
+*.key
+
+# LaTeX intermediate build files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.idx
+*.ilg
+*.ind
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# Python cache & environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/

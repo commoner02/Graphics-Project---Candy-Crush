@@ -19,6 +19,7 @@ add_executable(candy_pyramid
     src/Camera.cpp
     src/Shape.cpp
     src/Board.cpp
+    src/HUD.cpp
 )
 
 target_include_directories(candy_pyramid PRIVATE include)

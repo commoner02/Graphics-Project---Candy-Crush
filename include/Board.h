@@ -36,14 +36,33 @@ enum class GameState {
     CHECKING_MATCH,
     POPPING,
     FALLING,
-    REVERTING
+    REVERTING,
+    GAME_OVER
+};
+
+enum class BoardTheme {
+    FROSTED_MARBLE = 0,    // Theme 2: Pure Frosted White Sugar Marble (Clean & High Contrast)
+    CHOCOLATE_BAKERY = 1,  // Theme 1: Milk Chocolate Core & Vanilla Biscuit Trays
+    MIDNIGHT_ONYX = 2,     // Theme 3: Deep Obsidian & Royal Blue (Dark Arcade)
+    COUNT = 3
 };
 
 class Board {
 public:
     int score = 0;
     int combo = 0;
+    int movesLeft = 30;
+    static constexpr int MAX_MOVES = 30;
     GameState state = GameState::IDLE;
+
+    // Floating score popups for HUD
+    struct ScorePopup {
+        float x, y;       // Screen-space position (set by Board at match location)
+        int points;        // Points to display
+        float timer;       // Lifetime remaining
+        float maxTime;     // Total lifetime
+    };
+    std::vector<ScorePopup> scorePopups;
 
     BoardCoord selectedCoord;
     BoardCoord swapTargetCoord;
@@ -51,19 +70,24 @@ public:
     bool isExploded = false;
     float explodeProgress = 0.0f;
 
+    BoardTheme theme = BoardTheme::FROSTED_MARBLE; // Default: Theme 2 Frosted White Marble
+
     Board();
 
     void reset();
     void update(float deltaTime);
     void toggleExplode();
+    void cycleTheme();
+    glm::vec4 getBackgroundColor() const;
+    std::string getThemeName() const;
 
     // 3D Raycasting selection
     BoardCoord pickTile(const Ray& ray) const;
     void onTileClicked(const BoardCoord& coord);
 
     // Draw full scene (pyramid trays, core columns, and shapes)
-    void draw(const Shader& shader, const Mesh& cubeMesh, const Mesh& sphereMesh,
-              const Mesh& cylinderMesh, const Mesh& diamondMesh, float time) const;
+    void draw(const Shader& shader, const Mesh& trayMesh, const Mesh& bentCylMesh,
+              const Mesh& saucerMesh, const Mesh& pillowMesh, const Mesh& teardropMesh, float time) const;
 
     static constexpr int NUM_LAYERS = 3;
     static constexpr int RINGS_PER_WALL = 3;

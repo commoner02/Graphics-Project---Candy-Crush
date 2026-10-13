@@ -22,6 +22,7 @@ struct ShapeTile {
     int row = 0;
     int col = 0;
     int level = 0;
+    bool isGolden = false; // Rare high-value bonus shape (500 pts)
 
     // 3D coordinates
     glm::vec3 currentPos = glm::vec3(0.0f);
@@ -42,7 +43,7 @@ struct ShapeTile {
     void update(float deltaTime);
     glm::mat4 getModelMatrix(float time = 0.0f, bool isSelected = false) const;
 
-    void draw(const Shader& shader, const Mesh& sphereMesh, const Mesh& cylinderMesh,
-              const Mesh& cubeMesh, const Mesh& diamondMesh, bool isSelected, float time) const;
+    void draw(const Shader& shader, const Mesh& bentCylMesh, const Mesh& saucerMesh,
+              const Mesh& pillowMesh, const Mesh& teardropMesh, bool isSelected, float time) const;
 };
 

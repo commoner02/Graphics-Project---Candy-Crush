@@ -12,14 +12,37 @@ layout (location = 1) in vec3 aNormal;
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
+uniform int shadingMode;
+uniform vec3 viewPos;
+uniform vec4 objectColor;
 
 out vec3 Normal;
 out vec3 FragPos;
+out vec3 vGouraudColor;
 
 void main() {
     FragPos = vec3(model * vec4(aPos, 1.0));
     Normal = mat3(transpose(inverse(model))) * aNormal;
     gl_Position = projection * view * vec4(FragPos, 1.0);
+
+    if (shadingMode == 1) {
+        vec3 lightPos = vec3(7.0, 14.0, 7.0);
+        vec3 lightDir = normalize(lightPos - FragPos);
+        vec3 norm = normalize(Normal);
+        vec3 viewDir = normalize(viewPos - FragPos);
+        vec3 halfwayDir = normalize(lightDir + viewDir);
+
+        vec3 base = objectColor.rgb;
+        vec3 ambient = 0.25 * base;
+        float diff = max(dot(norm, lightDir), 0.0);
+        vec3 diffuse = diff * 0.65 * base;
+        float spec = pow(max(dot(norm, halfwayDir), 0.0), 32.0);
+        vec3 specular = spec * 0.45 * vec3(1.0);
+
+        vGouraudColor = ambient + diffuse + specular;
+    } else {
+        vGouraudColor = objectColor.rgb;
+    }
 }
 )";
 
@@ -27,25 +50,50 @@ static const char* DEFAULT_FRAG = R"(
 #version 330 core
 in vec3 Normal;
 in vec3 FragPos;
+in vec3 vGouraudColor;
 
 out vec4 FragColor;
 
 uniform vec4 objectColor;
 uniform bool isWireframe;
+uniform bool isTray;
+uniform int shadingMode;
+uniform vec3 viewPos;
 
 void main() {
     if (isWireframe) {
-        // High-contrast clean outline for wireframe inspection
-        FragColor = vec4(0.95, 0.95, 0.95, 1.0);
-    } else {
-        // Simple directional diffuse so solid mode showcases 3D depth
-        vec3 lightDir = normalize(vec3(0.5, 1.0, 0.7));
-        vec3 norm = normalize(Normal);
-        float diff = max(dot(norm, lightDir), 0.0);
-        vec3 ambient = 0.35 * objectColor.rgb;
-        vec3 diffuse = diff * 0.65 * objectColor.rgb;
-        FragColor = vec4(ambient + diffuse, objectColor.a);
+        FragColor = isTray ? vec4(0.38, 0.42, 0.52, 1.0) : vec4(objectColor.rgb, objectColor.a);
+        return;
     }
+    if (shadingMode == 3) {
+        vec3 n = normalize(Normal);
+        FragColor = vec4(n * 0.5 + 0.5, 1.0);
+        return;
+    }
+    if (shadingMode == 1 && !isTray) {
+        FragColor = vec4(vGouraudColor, objectColor.a);
+        return;
+    }
+    vec3 lightPos = vec3(7.0, 14.0, 7.0);
+    vec3 lightDir = normalize(lightPos - FragPos);
+    vec3 norm = normalize(Normal);
+    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 baseColor = isTray ? vec3(0.32, 0.36, 0.44) : objectColor.rgb;
+
+    if (shadingMode == 0) {
+        vec3 ambient = 0.35 * baseColor;
+        vec3 diffuse = diff * 0.65 * baseColor;
+        FragColor = vec4(ambient + diffuse, objectColor.a);
+        return;
+    }
+
+    vec3 viewDir = normalize(viewPos - FragPos);
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    vec3 ambient = 0.22 * baseColor;
+    vec3 diffuse = diff * 0.68 * baseColor;
+    float spec = pow(max(dot(norm, halfwayDir), 0.0), isTray ? 16.0 : 64.0);
+    vec3 specular = spec * (isTray ? 0.20 : 0.65) * vec3(1.0);
+    FragColor = vec4(ambient + diffuse + specular, objectColor.a);
 }
 )";
 
