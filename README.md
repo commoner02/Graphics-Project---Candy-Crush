@@ -6,6 +6,16 @@ Developed for **CSE 4102: Computer Graphics and Image Processing Laboratory**, D
 
 ---
 
+<div align="center">
+
+![3D Candy Crush Pyramid In-Game Gameplay](assets/gameplay_showcase.png)
+
+*Real-time hardware-accelerated rendering in OpenGL 3.3 Core Profile showing the 3-Tier Stepped Colosseum, Blinn-Phong illumination, procedural confections, and 2D vector HUD.*
+
+</div>
+
+---
+
 ## Author Information
 
 - **Developer:** Sree Shuvo Kumar Joy
@@ -71,6 +81,14 @@ Developed for **CSE 4102: Computer Graphics and Image Processing Laboratory**, D
 
 ## The Four Procedural Confectionery Shapes
 
+<div align="center">
+
+![Procedural Parametric Confectionery Primitives](assets/candies_procedural_overview.png)
+
+*Analytical 3D parametric meshes and mathematical equations for the 4 custom confectionery shapes synthesized dynamically in `src/Primitives.cpp`.*
+
+</div>
+
 | Shape                              | Triangle Count | Mathematical Synthesis Principle                                                                                                                                              |
 | :--------------------------------- | :------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Red Cherry Bent Cylinder** |     1,560     | Moving Frenet-Serret frame ($\mathbf{T}, \mathbf{N}, \mathbf{B}$) along quadratic spine curve $C(t)$, swept circular cross-section, and dual hemispherical terminal caps. |
@@ -90,6 +108,10 @@ candy_pyramid/
 ├── build.sh                          # Direct g++ compilation script
 ├── README.md                         # Project documentation and user guide
 ├── candy_pyramid                     # Compiled binary executable
+│
+├── assets/                           # Showcase screenshots and geometry figures
+│   ├── gameplay_showcase.png         # In-game rendering with HUD & Colosseum
+│   └── candies_procedural_overview.png # 3D parametric meshes & equation overview
 │
 ├── include/                          # Header declarations
 │   ├── Mesh.h                        # RAII GPU buffer encapsulation (VAO, VBO, EBO)
@@ -119,17 +141,13 @@ candy_pyramid/
 
 ---
 
-## Comprehensive Engineering Guide & Viva Documentation
+## Academic Topics & Viva Coverage
 
-The `notes/` directory contains complete academic documentation written for oral viva defense and examination:
-
-- **[Candy_Pyramid_Engineering_Guide.pdf](notes/Candy_Pyramid_Engineering_Guide.pdf):**
-  A **35-page textbook-grade handbook** containing:
-  - Plain-English introductions and real-world analogies for every graphics concept.
-  - Complete "Variables Explained" tables defining every variable in every mathematical equation.
-  - Mathematical proof for why surface normals require the inverse-transpose matrix $(\mathbf{M}^{-1})^T$.
-  - Word-for-word spoken scripts for the 6 most common faculty examination viva questions.
-  - 5 instant 1-line parameter modifications to demonstrate live code authorship.
+This project implements a complete curriculum-grade graphics engine showcasing:
+* **Mathematical Transformations**: Full $4 \times 4$ pipeline ($\mathbf{M}, \mathbf{V}, \mathbf{P}$) with orbital spherical camera unprojection.
+* **Analytical Normal Inversion**: Mathematical proof and implementation of $(\mathbf{M}^{-1})^T$ for lighting calculations under non-uniform scaling.
+* **Physics & Kinematics**: Parabolic swap arc hop ($h(s) = 4H \cdot s(1-s)$) and squash-and-stretch kinetic pop response.
+* **Non-Euclidean Topology**: Stepped Colosseum ring modulo adjacency linking 160 candies across 3 tiers.
 
 ---
 
